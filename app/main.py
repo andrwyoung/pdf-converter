@@ -10,6 +10,12 @@ MAX_PAGE_COUNT = 500  # Maximum number of pages to process
 
 app = FastAPI()
 
+def is_bold(font_name: str, flags: int) -> bool:
+    if flags & 2**4:  # true bold flag
+        return True
+    font_lower = font_name.lower()
+    return any(word in font_lower for word in ["bold", "black", "heavy", "semibold", "medium", ".b"])
+
 @app.post("/parse-pdf")
 async def parse_pdf(file: UploadFile = File(...), password: str = None):
     tmp_path = None
@@ -85,12 +91,23 @@ async def parse_pdf(file: UploadFile = File(...), password: str = None):
                             if not text:
                                 continue
                             
+                            flags = span.get("flags", 0)
+
                             blocks.append({
                                 "page": page_idx,
                                 "text": text,
-                                "font_size": span["size"],
-                                "bold": "Bold" in span.get("font", ""),
-                                "bbox": span["bbox"],  # future inline image/table positioning
+                                "font": span.get("font", ""),
+                                "font_size": span.get("size", 0),
+                                # "color": f"#{span.get('color', 0):06x}",
+
+                                # derived style attributes
+                                "superscript": bool(flags & 2**0),
+                                "italic": bool(flags & 2**1),
+                                # "serifed": bool(flags & 2**2),
+                                # "monospaced": bool(flags & 2**3),
+                                "bold": is_bold(span.get("font", ""), flags),
+
+                                "bbox": span.get("bbox", []),
                             })
         except MemoryError:
             raise HTTPException(status_code=413, detail="PDF too large to process")
